@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arterial Line Waveform Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one teaching column; a fixed-dark bedside monitor panel leads, then phase explorer, damping comparison, flush analysis. */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --fg:#16201d; --muted:#56635e; --line:#d5dcd8;
+  --accent:#c4263a; --accent-soft:#f8e3e6;
+  --ok:#1f7a4d; --ok-soft:#e1f2e8; --over:#2f5d9e; --over-soft:#e3ebf7; --under:#a35c00; --under-soft:#fbecd6;
+  --screen:#0b1210; --screen-grid:#18241f; --art:#ff4d61; --ghost:#9fb3ab; --screen-text:#d9e4df;
+  --f-display:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#171f1c; --fg:#e4ebe8; --muted:#9aa8a2; --line:#2a3531;
+  --accent:#ff6b7c; --accent-soft:#3a1c21;
+  --ok:#5fcf93; --ok-soft:#173226; --over:#83aef0; --over-soft:#1b2840; --under:#f0aa4c; --under-soft:#3a2a12;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#171f1c; --fg:#e4ebe8; --muted:#9aa8a2; --line:#2a3531;
+  --accent:#ff6b7c; --accent-soft:#3a1c21;
+  --ok:#5fcf93; --ok-soft:#173226; --over:#83aef0; --over-soft:#1b2840; --under:#f0aa4c; --under-soft:#3a2a12;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6}
+.wrap{max-width:1100px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:32px 64px;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(2.1rem,5vw,3.2rem);font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.8rem;font-weight:600}
+h3{font-size:1.25rem;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:500}
+.lead{max-width:68ch;color:var(--muted);font-size:1.05rem}
+header{display:flex;flex-direction:column;gap:12px}
+section{display:flex;flex-direction:column;gap:20px}
+.sec-head{display:flex;flex-direction:column;gap:8px;max-width:70ch}
+.sec-head p{color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* Monitor */
+.monitor{background:var(--screen);border-radius:14px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;border:1px solid #24312c}
+.screen-wrap{position:relative;min-width:0}
+#mon{width:100%;height:280px;display:block}
+.readouts{display:flex;flex-direction:column;gap:12px;color:var(--screen-text);font-family:var(--f-mono)}
+.ro{display:flex;flex-direction:column;gap:2px;border-bottom:1px solid #1f2b27;padding-bottom:10px}
+.ro:last-child{border-bottom:0}
+.ro-label{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:#8ea39a}
+.ro-art{color:var(--art);font-size:2.1rem;font-weight:600;line-height:1}
+.ro-map{color:var(--art);font-size:1.2rem}
+.ro-true{color:var(--ghost);font-size:.95rem}
+.ro-small{font-size:1.25rem;color:var(--screen-text)}
+.delta{font-size:.8rem;color:#f0c76a;min-height:1.2em}
+.status-pill{display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;font-weight:600;width:max-content}
+.st-opt{background:#173d2a;color:#7ee0a8}.st-over{background:#1c2b47;color:#9cc0ff}.st-under{background:#43300f;color:#ffc069}
+
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.ctl{display:flex;flex-direction:column;gap:8px;min-width:0}
+.ctl label,.ctl .lbl{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.ctl output{font-family:var(--f-mono);color:var(--fg);text-transform:none;letter-spacing:0}
+select,button{font:inherit}
+select{padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button,.btn{border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:.9rem}
+.seg button[aria-pressed="true"]{border-color:var(--fg);background:var(--fg);color:var(--bg)}
+.btn-flush{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn:focus-visible,.seg button:focus-visible,select:focus-visible,input:focus-visible,.phase-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ctl label.check{display:flex;justify-content:flex-start;gap:8px;align-items:center;font-size:.92rem;color:var(--fg);text-transform:none;letter-spacing:0;font-weight:400}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.note h3{margin-bottom:6px}
+.note p,.note li{color:var(--fg)}
+.note ul{margin:0;padding-left:1.1em;display:flex;flex-direction:column;gap:4px}
+
+/* Phase explorer */
+.phase-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:20px;align-items:start}
+.beat-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+#beat{width:100%;height:auto;display:block}
+#beat .trace{fill:none;stroke:var(--fg);stroke-width:2.2}
+#beat .seg-hit{fill:transparent;cursor:pointer}
+#beat .band{fill:var(--accent-soft);opacity:0;transition:opacity .2s}
+#beat .band.on{opacity:1}
+#beat .hl{fill:none;stroke:var(--accent);stroke-width:4;stroke-linecap:round;opacity:0}
+#beat .hl.on{opacity:1}
+#beat .axis{stroke:var(--line);stroke-width:1}
+#beat .ax-t{fill:var(--muted);font:12px var(--f-mono)}
+#beat .num circle{fill:var(--surface);stroke:var(--fg);stroke-width:1.5}
+#beat .num text{fill:var(--fg);font:600 12px var(--f-mono)}
+#beat .num.on circle{fill:var(--accent);stroke:var(--accent)}
+#beat .num.on text{fill:#fff}
+#beat .mapl{stroke:var(--muted);stroke-dasharray:4 4}
+.phase-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.phase-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.phase-btn{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:5px 12px;font-size:.85rem;cursor:pointer}
+.phase-btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.phase-detail{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.phase-detail .k{font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:2px}
+.phase-detail ul{margin:0;padding-left:1.1em}
+
+/* Damping */
+.damp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.damp{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.damp-top{padding:14px 16px 10px;display:flex;flex-direction:column;gap:4px}
+.damp.opt .damp-top{background:var(--ok-soft)} .damp.over .damp-top{background:var(--over-soft)} .damp.under .damp-top{background:var(--under-soft)}
+.damp.opt h3{color:var(--ok)} .damp.over h3{color:var(--over)} .damp.under h3{color:var(--under)}
+.damp canvas{width:100%;height:170px;display:block;background:var(--screen)}
+.damp-body{padding:14px 16px 18px;display:flex;flex-direction:column;gap:12px;font-size:.93rem}
+.damp-body .k{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.damp-body ul{margin:2px 0 0;padding-left:1.1em}
+.meas{font-family:var(--f-mono);font-size:.82rem;color:var(--muted)}
+
+/* Flush analysis */
+.flush-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;align-items:start}
+.flush-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+#step{width:100%;height:220px;display:block;border-radius:8px;background:var(--screen)}
+.calc{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.calc table{width:100%;border-collapse:collapse;font-size:.92rem}
+.calc td{padding:6px 0;border-bottom:1px solid var(--line)}
+.calc td:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.formula{font-family:var(--f-mono);background:var(--bg);border-radius:8px;padding:10px 12px;font-size:.85rem;overflow-x:auto}
+.tbl-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.tbl-wrap table{width:100%;border-collapse:collapse;min-width:640px;font-size:.93rem}
+.tbl-wrap th,.tbl-wrap td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl-wrap th{font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tbl-wrap tr:last-child td{border-bottom:0}
+.foot{color:var(--muted);font-size:.85rem;max-width:80ch}
+
+@media (max-width:860px){
+  .monitor{grid-template-columns:1fr}
+  .readouts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .phase-grid,.flush-grid,.note{grid-template-columns:1fr}
+  .damp-grid{grid-template-columns:1fr}
+}
+@media (max-width:480px){#mon{height:220px}.ro-art{font-size:1.7rem}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">Invasive hemodynamic monitoring</span>
+  <h1>Arterial Line Waveform Lab</h1>
+  <p class="lead">A simulated radial arterial line. Change the patient's physiology and the transducer's damping, fire a fast-flush test, and watch how the displayed waveform and numbers drift away from the true intra-arterial pressure.</p>
+</header>
+
+<section aria-labelledby="mon-h">
+  <div class="sec-head">
+    <span class="eyebrow">1 · Bedside monitor</span>
+    <h2 id="mon-h">Live arterial trace</h2>
+    <p>The red trace is what the monitor displays. The faint grey line is the true intra-arterial pressure, so you can see the error introduced by the tubing and transducer.</p>
+  </div>
+
+  <div class="monitor">
+    <div class="screen-wrap"><canvas id="mon" aria-label="Simulated arterial pressure monitor trace"></canvas></div>
+    <div class="readouts" aria-live="polite">
+      <div class="ro"><span class="ro-label">ART displayed</span><span class="ro-art mono" id="r-art">--/--</span><span class="ro-map mono" id="r-map">(--)</span></div>
+      <div class="ro"><span class="ro-label">True pressure</span><span class="ro-true mono" id="r-true">--/-- (--)</span><span class="delta mono" id="r-delta"></span></div>
+      <div class="ro"><span class="ro-label">HR · PPV</span><span class="ro-small mono" id="r-hr">--</span></div>
+      <div class="ro"><span class="ro-label">System</span><span class="status-pill st-opt" id="r-status">Optimal</span><span class="ro-true mono" id="r-sys">fn -- Hz · ζ --</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="ctl">
+      <label for="pattern">Patient physiology</label>
+      <select id="pattern">
+        <option value="normal">Normal</option>
+        <option value="hypo">Hypovolemia</option>
+        <option value="highsvr">High SVR (vasoconstriction)</option>
+        <option value="lowsvr">Low SVR (vasodilation / sepsis)</option>
+        <option value="as">Aortic stenosis</option>
+        <option value="ar">Aortic regurgitation</option>
+      </select>
+      <div class="row"><button class="btn btn-flush" id="flush" type="button">Fast flush</button><button class="btn" id="pause" type="button">Freeze</button></div>
+      <label class="check"><input type="checkbox" id="ghost" checked> Show true pressure</label>
+    </div>
+    <div class="ctl">
+      <span class="lbl">Damping preset</span>
+      <div class="seg" role="group" aria-label="Damping preset">
+        <button type="button" data-preset="opt" aria-pressed="true">Optimal</button>
+        <button type="button" data-preset="over" aria-pressed="false">Over-damped</button>
+        <button type="button" data-preset="under" aria-pressed="false">Under-damped</button>
+      </div>
+      <label for="zeta">Damping coefficient ζ <output id="o-zeta">0.60</output></label>
+      <input type="range" id="zeta" min="0.05" max="2.5" step="0.01" value="0.6">
+      <label for="fn">Natural frequency fn <output id="o-fn">20 Hz</output></label>
+      <input type="range" id="fn" min="4" max="40" step="0.5" value="20">
+    </div>
+    <div class="ctl">
+      <label for="hr">Heart rate <output id="o-hr">75 /min</output></label>
+      <input type="range" id="hr" min="40" max="160" step="1" value="75">
+      <label for="ppv">Respiratory pulse pressure variation <output id="o-ppv">5 %</output></label>
+      <input type="range" id="ppv" min="0" max="30" step="1" value="5">
+      <p class="foot">Tachycardia moves more of the waveform's energy toward the system's resonant frequency, so an under-damped line gets worse as heart rate rises.</p>
+    </div>
+  </div>
+
+  <div class="note" id="pattern-note">
+    <div><h3 id="pn-title">Normal</h3><p id="pn-text"></p></div>
+    <div><span class="eyebrow">What to look for</span><ul id="pn-list"></ul></div>
+  </div>
+</section>
+
+<section aria-labelledby="phase-h">
+  <div class="sec-head">
+    <span class="eyebrow">2 · Anatomy of one beat</span>
+    <h2 id="phase-h">The six phases of the arterial waveform</h2>
+    <p>Select a phase on the tracing or with the buttons. The phases are numbered in the order they occur in each cardiac cycle.</p>
+  </div>
+  <div class="phase-grid">
+    <div class="beat-card">
+      <svg id="beat" viewBox="0 0 640 340" role="img" aria-label="Single arterial pressure beat divided into six phases"></svg>
+      <div class="phase-btns" id="phase-btns"></div>
+    </div>
+    <div class="phase-detail" id="phase-detail" aria-live="polite"></div>
+  </div>
+</section>
+
+<section aria-labelledby="damp-h">
+  <div class="sec-head">
+    <span class="eyebrow">3 · Damping</span>
+    <h2 id="damp-h">Optimal, over-damped and under-damped</h2>
+    <p>The catheter, tubing and transducer behave like a mass on a spring. Two properties decide how faithfully they reproduce the pressure: the natural frequency (how fast the system can oscillate) and the damping coefficient (how quickly oscillations die out). Each tracing below shows a fast flush followed by the patient's waveform through that system.</p>
+  </div>
+  <div class="damp-grid">
+    <article class="damp opt">
+      <div class="damp-top"><h3>Optimal</h3><span class="meas" id="m-opt"></span></div>
+      <canvas id="c-opt" aria-label="Optimally damped fast flush and waveform"></canvas>
+      <div class="damp-body">
+        <div><div class="k">Flush test</div>Sharp square wave, then 1–2 oscillations that settle quickly to the waveform.</div>
+        <div><div class="k">Waveform</div>Crisp upstroke, rounded peak, distinct dicrotic notch.</div>
+        <div><div class="k">Numbers</div>SBP, DBP and MAP all accurate.</div>
+        <div><div class="k">Typical values</div>ζ about 0.5–0.7 with fn above about 15–20 Hz.</div>
+      </div>
+    </article>
+    <article class="damp over">
+      <div class="damp-top"><h3>Over-damped</h3><span class="meas" id="m-over"></span></div>
+      <canvas id="c-over" aria-label="Over-damped fast flush and waveform"></canvas>
+      <div class="damp-body">
+        <div><div class="k">Flush test</div>Slow, sloped return to baseline with fewer than 1.5 oscillations, often none.</div>
+        <div><div class="k">Waveform</div>Flattened and blunted. Slurred upstroke, dicrotic notch lost, narrow pulse pressure.</div>
+        <div><div class="k">Numbers</div>SBP falsely low, DBP falsely high. MAP stays close to true.</div>
+        <div><div class="k">Causes</div><ul><li>Air bubbles in the line or transducer (most common)</li><li>Clot at the catheter tip</li><li>Kinked catheter or tubing; wrist position</li><li>Catheter tip against the vessel wall</li><li>Compliant (non-pressure) tubing, loose connections</li><li>Flush bag under 300 mmHg</li></ul></div>
+        <div><div class="k">Fix</div>Aspirate and flush, remove air, reposition the wrist, check connections and bag pressure.</div>
+      </div>
+    </article>
+    <article class="damp under">
+      <div class="damp-top"><h3>Under-damped</h3><span class="meas" id="m-under"></span></div>
+      <canvas id="c-under" aria-label="Under-damped fast flush and waveform"></canvas>
+      <div class="damp-body">
+        <div><div class="k">Flush test</div>Ringing: more than 2–3 oscillations after the flush before it settles.</div>
+        <div><div class="k">Waveform</div>Tall, narrow, spiky systolic peak ("overshoot" or "fling"), extra oscillations, exaggerated notch.</div>
+        <div><div class="k">Numbers</div>SBP falsely high, DBP may read slightly low. MAP stays close to true.</div>
+        <div><div class="k">Causes</div><ul><li>Long tubing (lowers fn)</li><li>Extra stopcocks and connections</li><li>Tachycardia or hyperdynamic circulation</li><li>Stiff, non-compliant arteries</li><li>Catheter whip</li></ul></div>
+        <div><div class="k">Fix</div>Shorten tubing, remove extra stopcocks, use a damping device; trust MAP over SBP until fixed.</div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="flush-h">
+  <div class="sec-head">
+    <span class="eyebrow">4 · Reading the flush test</span>
+    <h2 id="flush-h">Calculating fn and ζ from the square wave</h2>
+    <p>This is the step response of whatever system is set on the monitor above. Move the ζ and fn sliders and the measurement updates.</p>
+  </div>
+  <div class="flush-grid">
+    <div class="flush-card"><canvas id="step" aria-label="Square wave test step response with oscillation peaks marked"></canvas></div>
+    <div class="calc">
+      <table>
+        <tbody>
+          <tr><td>Oscillations after release</td><td id="k-osc">--</td></tr>
+          <tr><td>Peak-to-peak period</td><td id="k-per">--</td></tr>
+          <tr><td>Measured natural frequency</td><td id="k-fn">--</td></tr>
+          <tr><td>Amplitude ratio A2 / A1</td><td id="k-ar">--</td></tr>
+          <tr><td>Calculated ζ</td><td id="k-z">--</td></tr>
+          <tr><td>Interpretation</td><td id="k-int">--</td></tr>
+        </tbody>
+      </table>
+      <div class="formula">fn = 1 ÷ period (s)<br>At 25 mm/s paper speed: fn = 25 ÷ distance between peaks (mm)<br>ζ = −ln(A2/A1) ÷ √(π² + ln²(A2/A1))</div>
+      <p class="foot">A1 and A2 are the heights of two successive oscillations measured from the settled baseline. A higher fn tolerates a wider range of ζ; a low fn (long tubing) leaves almost no acceptable damping range.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="sum-h">
+  <div class="sec-head">
+    <span class="eyebrow">5 · Quick reference</span>
+    <h2 id="sum-h">Damping at a glance</h2>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Feature</th><th>Optimal</th><th>Over-damped</th><th>Under-damped</th></tr></thead>
+    <tbody>
+      <tr><td>Oscillations after flush</td><td>1–2</td><td>&lt; 1.5 or none</td><td>&gt; 2–3</td></tr>
+      <tr><td>Upstroke</td><td>Crisp</td><td>Slurred, slow</td><td>Steep with overshoot</td></tr>
+      <tr><td>Dicrotic notch</td><td>Distinct</td><td>Lost</td><td>Exaggerated, extra waves</td></tr>
+      <tr><td>Systolic pressure</td><td>Accurate</td><td>Falsely low</td><td>Falsely high</td></tr>
+      <tr><td>Diastolic pressure</td><td>Accurate</td><td>Falsely high</td><td>Accurate to slightly low</td></tr>
+      <tr><td>Mean arterial pressure</td><td>Accurate</td><td>Near true</td><td>Near true</td></tr>
+      <tr><td>Risk if not recognized</td><td>None</td><td>Treating false hypotension; missing hypertension</td><td>Treating false hypertension</td></tr>
+    </tbody>
+  </table></div>
+  <p class="foot">The simulation models the catheter–tubing–transducer system as a second-order system and is intended for teaching. Values are illustrative; always confirm leveling (phlebostatic axis) and zeroing before interpreting any arterial pressure.</p>
+</section>
+</div>
+
+<script>
+(function(){
+const PAT={
+ normal:{name:'Normal',sbp:120,dbp:70,hr:75,ppv:5,tUp:.09,nl:.58,dep:.06,bump:.05,tau:.32,shoulder:0,bis:0,ext:0,
+  text:'A sharp upstroke, a rounded systolic peak, a dicrotic notch about halfway to two-thirds of the way down, and a smooth diastolic runoff.',
+  look:['Notch roughly halfway between systolic and diastolic','Pulse pressure around 40–50 mmHg','Little beat-to-beat variation with breathing (PPV under about 10%)']},
+ hypo:{name:'Hypovolemia',sbp:92,dbp:58,hr:112,ppv:18,tUp:.08,nl:.38,dep:.05,bump:.04,tau:.2,shoulder:0,bis:0,ext:0,
+  text:'Low stroke volume narrows the pulse and the beats rise and fall with ventilation. Under positive pressure ventilation, a large swing suggests the patient may be fluid responsive.',
+  look:['Narrow pulse pressure, smaller area under the systolic curve','Low dicrotic notch','Pulse pressure variation above about 12–13% during controlled ventilation','Tachycardia']},
+ highsvr:{name:'High SVR (vasoconstriction)',sbp:168,dbp:96,hr:68,ppv:5,tUp:.075,nl:.74,dep:.05,bump:.04,tau:.6,shoulder:0,bis:0,ext:0,
+  text:'Increased resistance slows runoff, so pressure stays high through diastole and the notch rides high on the downslope.',
+  look:['High dicrotic notch','Slow, flat diastolic runoff','Elevated diastolic and mean pressure']},
+ lowsvr:{name:'Low SVR (vasodilation / sepsis)',sbp:96,dbp:44,hr:104,ppv:8,tUp:.07,nl:.3,dep:.04,bump:.04,tau:.14,shoulder:0,bis:0,ext:0,
+  text:'Low resistance lets blood run off quickly. The downslope is steep, the notch sits low, and diastolic pressure falls.',
+  look:['Low dicrotic notch','Steep diastolic runoff','Wide pulse pressure with low diastolic pressure','Often a brisk upstroke with a hyperdynamic heart']},
+ as:{name:'Aortic stenosis',sbp:104,dbp:76,hr:70,ppv:5,tUp:.2,nl:.62,dep:.015,bump:.01,tau:.4,shoulder:1,bis:0,ext:.05,
+  text:'Ejection through a narrow valve is slow and small: pulsus parvus et tardus. A shoulder (anacrotic notch) may appear on the upstroke.',
+  look:['Slow, slurred upstroke with a late, rounded peak','Anacrotic notch on the upstroke','Narrow pulse pressure','Indistinct dicrotic notch (can mimic over-damping)']},
+ ar:{name:'Aortic regurgitation',sbp:162,dbp:42,hr:80,ppv:5,tUp:.06,nl:.25,dep:.03,bump:.03,tau:.12,shoulder:0,bis:1,ext:0,
+  text:'A large stroke volume ejects rapidly and then leaks back into the ventricle during diastole, widening the pulse pressure. Two systolic peaks (bisferiens) may appear.',
+  look:['Wide pulse pressure with very low diastolic pressure','Steep upstroke and rapid runoff','Bisferiens (double) systolic peak','Low or absent dicrotic notch']}
+};
+const PRESET={opt:{z:.6,f:20},over:{z:1.8,f:8},under:{z:.12,f:9}};
+
+function shape(t,P,T){
+  const tu=P.tUp, nd=0.05;
+  const ts=Math.min(0.30*Math.sqrt(T/0.8)+P.ext, T-0.18);
+  if(t<tu){const x=t/tu; let v=0.5-0.5*Math.cos(Math.PI*x); if(P.shoulder) v-=0.12*Math.exp(-(((x-0.45)/0.08)**2)); return v;}
+  if(t<ts){const x=(t-tu)/(ts-tu); const xx=P.bis?x**1.8:x; const s=xx*xx*(3-2*xx); let v=1-(1-P.nl)*s;
+    if(P.bis) v+=-0.16*Math.exp(-(((x-0.22)/0.09)**2))+0.06*Math.exp(-(((x-0.45)/0.1)**2)); return v;}
+  if(t<ts+nd){const u=(t-ts)/nd; const s=u*u*(3-2*u); return P.nl+P.bump*s-P.dep*Math.sin(Math.PI*u)*(1-u)*2;}
+  const t0=ts+nd,d0=P.nl+P.bump,E=Math.exp(-(T-t0)/P.tau); return d0*(Math.exp(-(t-t0)/P.tau)-E)/(1-E);
+}
+function sysEnd(P,T){return Math.min(0.30*Math.sqrt(T/0.8)+P.ext,T-0.18);}
+
+function classify(z,f){
+  if(z>0.8) return 'over';
+  if(z<0.4) return 'under';
+  if(f<10 && z<0.5) return 'under';
+  return 'opt';
+}
+const CLS_LABEL={opt:'Optimal',over:'Over-damped',under:'Under-damped'};
+
+// ---------- state
+const st={pat:'normal',z:.6,f:20,hr:75,ppv:5,paused:false,ghost:true};
+const $=id=>document.getElementById(id);
+
+// ---------- live monitor sim
+const SWEEP=5, DT=0.0005, YMAX=200, YMIN=0;
+const sim={t:0,beat0:0,T:.8,fac:1,y:70,v:0,flushEnd:-1,flushStart:-1,
+  bmax:-1e9,bmin:1e9,bsum:0,tmax:-1e9,tmin:1e9,tsum:0,n:0,valid:true,lastPP:[]};
+let cols=600, bufY=new Float32Array(cols).fill(NaN), bufX=new Float32Array(cols).fill(NaN), head=0;
+const mon=$('mon'), mctx=mon.getContext('2d');
+let mW=0,mH=0;
+function sizeMon(){
+  const r=mon.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  mW=r.width; mH=r.height; mon.width=Math.round(mW*d); mon.height=Math.round(mH*d); mctx.setTransform(d,0,0,d,0,0);
+  const nc=Math.max(100,Math.round(mW-40));
+  if(nc!==cols){cols=nc;bufY=new Float32Array(cols).fill(NaN);bufX=new Float32Array(cols).fill(NaN);}
+}
+function newBeat(){
+  if(sim.n>0 && sim.valid){
+    const dS=sim.bmax,dD=sim.bmin,dM=sim.bsum/sim.n,tS=sim.tmax,tD=sim.tmin,tM=sim.tsum/sim.n;
+    $('r-art').textContent=Math.round(dS)+'/'+Math.round(dD);
+    $('r-map').textContent='('+Math.round(dM)+')';
+    $('r-true').textContent=Math.round(tS)+'/'+Math.round(tD)+' ('+Math.round(tM)+')';
+    const eS=Math.round(dS-tS),eD=Math.round(dD-tD);
+    $('r-delta').textContent=(Math.abs(eS)>=3||Math.abs(eD)>=3)?`Error: SBP ${eS>0?'+':''}${eS}, DBP ${eD>0?'+':''}${eD}`:'Within 2 mmHg';
+    sim.lastPP.push(tS-tD); if(sim.lastPP.length>5) sim.lastPP.shift();
+    if(sim.lastPP.length>=4){const mx=Math.max(...sim.lastPP),mn=Math.min(...sim.lastPP),me=(mx+mn)/2;
+      $('r-hr').textContent=st.hr+' · '+Math.round(100*(mx-mn)/me)+'%';}
+    else $('r-hr').textContent=st.hr+' · --';
+  }
+  sim.bmax=-1e9;sim.bmin=1e9;sim.bsum=0;sim.tmax=-1e9;sim.tmin=1e9;sim.tsum=0;sim.n=0;sim.valid=true;
+  sim.T=60/st.hr;
+  sim.fac=1+(st.ppv/200)*Math.sin(2*Math.PI*sim.beat0/4);
+}
+function arterialAt(t){
+  while(t-sim.beat0>=sim.T){sim.beat0+=sim.T;newBeat();}
+  const P=PAT[st.pat];
+  return P.dbp+(P.sbp-P.dbp)*sim.fac*shape(t-sim.beat0,P,sim.T);
+}
+function step(dt){
+  const w=2*Math.PI*st.f, z=st.z;
+  const steps=Math.round(dt/DT);
+  for(let i=0;i<steps;i++){
+    sim.t+=DT;
+    const xa=arterialAt(sim.t);
+    const flushing=sim.t<sim.flushEnd;
+    const x=flushing?300:xa;
+    const a=w*w*(x-sim.y)-2*z*w*sim.v; sim.v+=a*DT; sim.y+=sim.v*DT;
+    if(flushing || sim.t<sim.flushEnd+0.6) sim.valid=false;
+    sim.bmax=Math.max(sim.bmax,sim.y);sim.bmin=Math.min(sim.bmin,sim.y);sim.bsum+=sim.y;
+    sim.tmax=Math.max(sim.tmax,xa);sim.tmin=Math.min(sim.tmin,xa);sim.tsum+=xa;sim.n++;
+    const c=Math.floor(((sim.t%SWEEP)/SWEEP)*cols);
+    if(c!==head){ // clear columns skipped
+      let k=head; while(k!==c){k=(k+1)%cols; bufY[k]=NaN; bufX[k]=NaN;}
+      head=c;
+    }
+    bufY[c]=sim.y; bufX[c]=xa;
+  }
+}
+function drawMon(){
+  const ctx=mctx, L=34, R=6, top=10, bot=22, W=mW, H=mH;
+  ctx.fillStyle='#0b1210'; ctx.fillRect(0,0,W,H);
+  const pw=W-L-R, ph=H-top-bot;
+  const Y=p=>top+ph*(1-(p-YMIN)/(YMAX-YMIN));
+  ctx.font='11px "IBM Plex Mono", monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';
+  for(let p=0;p<=200;p+=50){ctx.strokeStyle=p%100===0?'#22322c':'#18241f';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,Y(p));ctx.lineTo(W-R,Y(p));ctx.stroke();ctx.fillStyle='#7f948b';ctx.fillText(p,L-6,Y(p));}
+  ctx.textAlign='left'; ctx.fillStyle='#7f948b'; ctx.textBaseline='alphabetic';
+  ctx.fillText('ART mmHg · 25 mm/s · 1 s grid',L,H-6);
+  for(let s=1;s<SWEEP;s++){const x=L+pw*s/SWEEP;ctx.strokeStyle='#18241f';ctx.beginPath();ctx.moveTo(x,top);ctx.lineTo(x,top+ph);ctx.stroke();}
+  const sx=i=>L+pw*i/cols, gap=Math.max(6,Math.round(cols*0.015));
+  function path(buf,color,width,dash){
+    ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash||[]);ctx.lineJoin='round';
+    ctx.beginPath();let pen=false;
+    for(let i=0;i<cols;i++){
+      const ahead=(i-head+cols)%cols; if(ahead>0&&ahead<=gap){pen=false;continue;}
+      const v=buf[i]; if(isNaN(v)){pen=false;continue;}
+      const yy=Math.max(top-2,Math.min(top+ph+2,Y(v)));
+      if(!pen){ctx.moveTo(sx(i),yy);pen=true;} else ctx.lineTo(sx(i),yy);
+    }
+    ctx.stroke();ctx.setLineDash([]);
+  }
+  if(st.ghost) path(bufX,'rgba(159,179,171,.55)',1.2,[4,3]);
+  path(bufY,'#ff4d61',2);
+  if(sim.t<sim.flushEnd+0.05){ctx.fillStyle='#ffc069';ctx.textAlign='right';ctx.fillText('FLUSH',W-R-4,top+14);}
+}
+let last=null;
+function loop(ts){
+  if(last===null) last=ts;
+  let dt=Math.min(0.05,(ts-last)/1000); last=ts;
+  if(!st.paused && dt>0) step(dt);
+  drawMon();
+  requestAnimationFrame(loop);
+}
+
+// ---------- readouts for system
+function updateSys(){
+  const c=classify(st.z,st.f);
+  const el=$('r-status'); el.textContent=CLS_LABEL[c]; el.className='status-pill st-'+c;
+  $('r-sys').textContent='fn '+st.f+' Hz · ζ '+st.z.toFixed(2);
+  $('o-zeta').textContent=st.z.toFixed(2); $('o-fn').textContent=st.f+' Hz';
+  document.querySelectorAll('[data-preset]').forEach(b=>{const p=PRESET[b.dataset.preset];b.setAttribute('aria-pressed',String(Math.abs(p.z-st.z)<.005&&Math.abs(p.f-st.f)<.01));});
+  drawStep();
+}
+function updatePattern(){
+  const P=PAT[st.pat];
+  $('pn-title').textContent=P.name; $('pn-text').textContent=P.text;
+  $('pn-list').innerHTML=P.look.map(s=>'<li>'+s+'</li>').join('');
+}
+
+// ---------- offline traces for damping cards
+function offline(z,f,dur,flushA,flushB){
+  const P=PAT.normal,T=0.8,w=2*Math.PI*f,dt=0.0002;let y=P.dbp,v=0;const out=[];
+  for(let t=0;t<dur;t+=dt){
+    const xa=P.dbp+(P.sbp-P.dbp)*shape(t%T,P,T);
+    const x=(t>=flushA&&t<flushB)?300:xa;
+    const a=w*w*(x-y)-2*z*w*v; v+=a*dt; y+=v*dt;
+    out.push(y);
+  }
+  return {out,dt};
+}
+function steadyStats(z,f){
+  const P=PAT.normal,T=0.8,w=2*Math.PI*f,dt=0.0002;let y=P.dbp,v=0,mx=-1e9,mn=1e9,s=0,n=0;
+  for(let t=0;t<5;t+=dt){const x=P.dbp+(P.sbp-P.dbp)*shape(t%T,P,T);const a=w*w*(x-y)-2*z*w*v;v+=a*dt;y+=v*dt;
+    if(t>5-T){mx=Math.max(mx,y);mn=Math.min(mn,y);s+=y;n++;}}
+  return Math.round(mx)+'/'+Math.round(mn)+' ('+Math.round(s/n)+')';
+}
+function prepCanvas(c){
+  const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  c.width=Math.round(r.width*d);c.height=Math.round(r.height*d);
+  const ctx=c.getContext('2d');ctx.setTransform(d,0,0,d,0,0);return {ctx,W:r.width,H:r.height};
+}
+function drawCard(id,key){
+  const p=PRESET[key]; const {ctx,W,H}=prepCanvas($(id));
+  ctx.fillStyle='#0b1210';ctx.fillRect(0,0,W,H);
+  const {out,dt}=offline(p.z,p.f,2.6,0.75,1.15);
+  const top=8,bot=8,ymax=310,ymin=40,Y=v=>top+(H-top-bot)*(1-(v-ymin)/(ymax-ymin));
+  [50,100,150,200,250,300].forEach(g=>{ctx.strokeStyle='#18241f';ctx.beginPath();ctx.moveTo(0,Y(g));ctx.lineTo(W,Y(g));ctx.stroke();});
+  ctx.strokeStyle='#ff4d61';ctx.lineWidth=1.8;ctx.lineJoin='round';ctx.beginPath();
+  const N=out.length;for(let i=0;i<N;i+=3){const x=W*i/N,yy=Y(out[i]);i?ctx.lineTo(x,yy):ctx.moveTo(x,yy);}ctx.stroke();
+  ctx.fillStyle='#7f948b';ctx.font='11px "IBM Plex Mono", monospace';ctx.fillText('flush',W*0.75/2.6+4,Y(300)+14);
+  $('m-'+key).textContent='ζ '+p.z+' · fn '+p.f+' Hz · reads '+steadyStats(p.z,p.f)+' vs true 120/70 (92)';
+}
+
+// ---------- step response analysis
+function analyze(z,f){
+  const w=2*Math.PI*f,dt=0.00005;let y=300,v=0;const ys=[],ext=[];let prevV=0;
+  const dur=Math.min(0.6,Math.max(0.25,8/f));
+  for(let t=0;t<dur;t+=dt){const a=w*w*(0-y)-2*z*w*v;v+=a*dt;y+=v*dt;ys.push(y);
+    if(t>0&&((prevV<0&&v>=0)||(prevV>0&&v<=0))) ext.push({t,y});prevV=v;}
+  return {ys,dt,dur,ext};
+}
+function drawStep(){
+  const c=$('step'); const {ctx,W,H}=prepCanvas(c);
+  const {ys,dt,dur,ext}=analyze(st.z,st.f);
+  ctx.fillStyle='#0b1210';ctx.fillRect(0,0,W,H);
+  const L=40,top=14,bot=24,ph=H-top-bot,pw=W-L-10,ymin=-240,ymax=320;
+  const Y=v=>top+ph*(1-(v-ymin)/(ymax-ymin)),X=t=>L+pw*(t+0.05)/(dur+0.05);
+  ctx.font='11px "IBM Plex Mono", monospace';ctx.textAlign='right';ctx.textBaseline='middle';
+  [-200,-100,0,100,200,300].forEach(g=>{ctx.strokeStyle=g===0?'#2c3d36':'#18241f';ctx.beginPath();ctx.moveTo(L,Y(g));ctx.lineTo(W-10,Y(g));ctx.stroke();ctx.fillStyle='#7f948b';ctx.fillText(g,L-6,Y(g));});
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText('mmHg relative to baseline · time after flush release',L,H-6);
+  ctx.strokeStyle='#ff4d61';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X(-0.05),Y(300));ctx.lineTo(X(0),Y(300));
+  for(let i=0;i<ys.length;i+=4) ctx.lineTo(X(i*dt),Y(ys[i]));ctx.stroke();
+  const sig=ext.filter(e=>Math.abs(e.y)>3);
+  sig.slice(0,6).forEach((e,i)=>{ctx.fillStyle='#ffc069';ctx.beginPath();ctx.arc(X(e.t),Y(e.y),3.5,0,7);ctx.fill();
+    if(i<2){ctx.fillText('A'+(i+1),X(e.t)+6,Y(e.y)+(e.y<0?14:-6));}});
+  // table
+  const osc=sig.length/2;
+  $('k-osc').textContent=sig.length? (osc<1? 'under 1': osc.toFixed(1)) : 'none';
+  if(sig.length>=2){
+    const per=2*(sig[1].t-sig[0].t), fm=1/per, ar=Math.abs(sig[1].y)/Math.abs(sig[0].y), ln=Math.log(ar);
+    const ze=-ln/Math.sqrt(Math.PI*Math.PI+ln*ln);
+    $('k-per').textContent=(per*1000).toFixed(0)+' ms';
+    $('k-fn').textContent=fm.toFixed(1)+' Hz';
+    $('k-ar').textContent=ar.toFixed(2);
+    $('k-z').textContent=ze.toFixed(2);
+  } else {
+    $('k-per').textContent='not measurable';$('k-fn').textContent='not measurable';$('k-ar').textContent='--';
+    $('k-z').textContent=st.z>=1?'≥ 1 (no oscillation)':'> 0.8';
+  }
+  $('k-int').textContent=CLS_LABEL[classify(st.z,st.f)];
+}
+
+// ---------- phase explorer
+const PHASES=[
+ {name:'Systolic upstroke',alt:'Anacrotic limb',
+  what:'The aortic valve opens and the left ventricle ejects blood into the aorta. In a radial line the upstroke follows the ECG R wave by roughly 120–200 ms because the pressure wave has to travel from the heart.',
+  tells:['Steepness (dP/dt) reflects left ventricular contractility','The area from the upstroke to the dicrotic notch tracks stroke volume (the basis of pulse contour cardiac output)'],
+  changes:['Steep: hyperdynamic states, aortic regurgitation, inotropes','Slow and slurred: poor contractility, aortic stenosis (with an anacrotic shoulder), or an over-damped line']},
+ {name:'Systolic peak',alt:'Peak systolic pressure',
+  what:'Peak ejection pressure, displayed as SBP. Further from the heart, reflected waves add to the forward wave, so peripheral SBP reads higher and the peak looks narrower than in the aorta (distal pulse amplification). MAP stays nearly the same along the arterial tree.',
+  tells:['Systolic blood pressure','Comparing sites: dorsalis pedis SBP is often 10–20 mmHg above radial SBP'],
+  changes:['Falsely high and spiky with under-damping','Falsely low and rounded with over-damping']},
+ {name:'Systolic decline',alt:'Late systole',
+  what:'Ejection slows while blood begins running off into the peripheral arteries. Pressure falls even though the aortic valve is still open.',
+  tells:['How fast blood leaves the central arteries','Wave reflection from the periphery shapes this segment'],
+  changes:['Steeper decline with low SVR','More sustained with high SVR or stiff arteries']},
+ {name:'Dicrotic notch',alt:'Incisura',
+  what:'Aortic valve closure marks the end of systolic ejection. In peripheral arteries the notch appears later and is shaped largely by wave reflection, so it is clearest in central lines and less distinct in radial or pedal lines.',
+  tells:['End of systole: the systolic ejection period runs from upstroke to notch','Its height gives a rough read on vascular tone'],
+  changes:['High notch: vasoconstriction, high SVR','Low notch: low SVR, vasodilation, hypovolemia','Lost: over-damping; exaggerated: under-damping']},
+ {name:'Diastolic runoff',alt:'Diastole',
+  what:'With the aortic valve closed, elastic recoil of the arteries keeps blood moving forward into the capillaries. Pressure decays smoothly until the next beat.',
+  tells:['The slope reflects SVR and arterial compliance','Most of each cycle is diastole, which is why MAP sits closer to DBP'],
+  changes:['Steep runoff: low SVR, aortic regurgitation','Flat runoff: high SVR, vasoconstriction','Shorter with tachycardia, which raises DBP and MAP slightly']},
+ {name:'End-diastolic pressure',alt:'DBP',
+  what:'The lowest pressure, just before the next upstroke, displayed as DBP.',
+  tells:['Diastolic blood pressure','Coronary perfusion pressure ≈ DBP − LVEDP, so a low DBP threatens myocardial oxygen supply'],
+  changes:['Low: vasodilation, aortic regurgitation, bradycardia with long runoff','Falsely high with over-damping']}
+];
+const B={L:56,R:20,T:24,Bt:42,W:640,H:340};
+const BP=PAT.normal, BT=0.9;
+function bx(t){return B.L+(B.W-B.L-B.R)*t/BT;}
+function by(p){return B.T+(B.H-B.T-B.Bt)*(1-(p-50)/(140-50));}
+function bp(t){return BP.dbp+(BP.sbp-BP.dbp)*shape(t,BP,BT);}
+const TS=sysEnd(BP,BT);
+const SEG=[[0,0.07],[0.07,0.15],[0.15,TS-0.01],[TS-0.01,TS+0.05],[TS+0.05,BT-0.06],[BT-0.06,BT]];
+const NUMPOS=[0.04,0.11,0.24,TS+0.02,0.6,BT-0.02];
+let selPhase=0;
+function buildBeat(){
+  const svg=$('beat'); const ns='http://www.w3.org/2000/svg';
+  const mk=(tag,attrs,parent)=>{const e=document.createElementNS(ns,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;};
+  svg.innerHTML='';
+  SEG.forEach((s,i)=>mk('rect',{class:'band','data-i':i,x:bx(s[0]),y:B.T,width:bx(s[1])-bx(s[0]),height:B.H-B.T-B.Bt}));
+  [60,80,100,120,140].forEach(p=>{mk('line',{class:'axis',x1:B.L,x2:B.W-B.R,y1:by(p),y2:by(p)});const t=mk('text',{class:'ax-t',x:B.L-8,y:by(p)+4,'text-anchor':'end'});t.textContent=p;});
+  const ax=mk('text',{class:'ax-t',x:B.L,y:B.H-10});ax.textContent='mmHg · one beat at 67/min (0.9 s)';
+  let mean=0,n=0;for(let t=0;t<BT;t+=0.002){mean+=bp(t);n++;}mean/=n;
+  mk('line',{class:'mapl',x1:B.L,x2:B.W-B.R,y1:by(mean),y2:by(mean)});
+  const mt=mk('text',{class:'ax-t',x:B.W-B.R,y:by(mean)-6,'text-anchor':'end'});mt.textContent='MAP '+Math.round(mean);
+  let d='';for(let t=0;t<=BT+1e-9;t+=0.003){d+=(t?'L':'M')+bx(t).toFixed(1)+' '+by(bp(t)).toFixed(1);}
+  mk('path',{class:'trace',d});
+  SEG.forEach((s,i)=>{let dd='';for(let t=s[0];t<=s[1]+1e-9;t+=0.003){dd+=(t===s[0]?'M':'L')+bx(t).toFixed(1)+' '+by(bp(t)).toFixed(1);}mk('path',{class:'hl','data-i':i,d:dd});});
+  SEG.forEach((s,i)=>{const r=mk('rect',{class:'seg-hit','data-i':i,x:bx(s[0]),y:B.T,width:bx(s[1])-bx(s[0]),height:B.H-B.T-B.Bt});r.addEventListener('click',()=>selectPhase(i));});
+  NUMPOS.forEach((t,i)=>{
+    const above=i!==5; const yy=by(bp(t))+(above?-22:-22);
+    const g=mk('g',{class:'num','data-i':i,style:'cursor:pointer'});
+    mk('circle',{cx:bx(t),cy:yy,r:11},g);const tx=mk('text',{x:bx(t),y:yy+4,'text-anchor':'middle'},g);tx.textContent=i+1;
+    g.addEventListener('click',()=>selectPhase(i));
+  });
+  const btns=$('phase-btns');btns.innerHTML='';
+  PHASES.forEach((p,i)=>{const b=document.createElement('button');b.type='button';b.className='phase-btn';b.textContent=(i+1)+' · '+p.name;b.addEventListener('click',()=>selectPhase(i));btns.appendChild(b);});
+  selectPhase(selPhase);
+}
+function selectPhase(i){
+  selPhase=i;
+  document.querySelectorAll('#beat .band,#beat .hl,#beat .num').forEach(e=>e.classList.toggle('on',+e.dataset.i===i));
+  document.querySelectorAll('#phase-btns .phase-btn').forEach((b,k)=>b.setAttribute('aria-pressed',String(k===i)));
+  const p=PHASES[i];
+  $('phase-detail').innerHTML=`<div><span class="eyebrow">Phase ${i+1} · ${p.alt}</span><h3 style="margin-top:4px">${p.name}</h3></div>
+   <p>${p.what}</p>
+   <div><div class="k">What it tells you</div><ul>${p.tells.map(s=>'<li>'+s+'</li>').join('')}</ul></div>
+   <div><div class="k">What changes it</div><ul>${p.changes.map(s=>'<li>'+s+'</li>').join('')}</ul></div>`;
+}
+
+// ---------- wire controls
+function setZF(z,f){st.z=z;st.f=f;$('zeta').value=z;$('fn').value=f;updateSys();}
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{const p=PRESET[b.dataset.preset];setZF(p.z,p.f);}));
+$('zeta').addEventListener('input',e=>{st.z=+e.target.value;updateSys();});
+$('fn').addEventListener('input',e=>{st.f=+e.target.value;updateSys();});
+$('hr').addEventListener('input',e=>{st.hr=+e.target.value;$('o-hr').textContent=st.hr+' /min';});
+$('ppv').addEventListener('input',e=>{st.ppv=+e.target.value;$('o-ppv').textContent=st.ppv+' %';sim.lastPP=[];});
+$('pattern').addEventListener('change',e=>{st.pat=e.target.value;const P=PAT[st.pat];st.hr=P.hr;st.ppv=P.ppv;
+  $('hr').value=P.hr;$('o-hr').textContent=P.hr+' /min';$('ppv').value=P.ppv;$('o-ppv').textContent=P.ppv+' %';sim.lastPP=[];updatePattern();});
+$('flush').addEventListener('click',()=>{sim.flushEnd=sim.t+0.5;});
+$('pause').addEventListener('click',e=>{st.paused=!st.paused;e.target.textContent=st.paused?'Resume':'Freeze';});
+$('ghost').addEventListener('change',e=>{st.ghost=e.target.checked;});
+
+function drawStatic(){sizeMon();drawCard('c-opt','opt');drawCard('c-over','over');drawCard('c-under','under');drawStep();}
+let rt;window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(drawStatic,120);});
+// prefill monitor so the first frame shows a trace
+sizeMon(); step(SWEEP*0.8);
+updatePattern(); updateSys(); buildBeat(); drawStatic();
+requestAnimationFrame(loop);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(drawStatic);
+})();
+</script>
+</body>
+</html>
